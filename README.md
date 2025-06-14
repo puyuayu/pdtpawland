@@ -1,8 +1,7 @@
-Berikut adalah **README** untuk proyek UAP berbasis sistem penitipan hewan *PawLand*, ditulis dengan gaya dan struktur serupa dengan `pdtbank`:
 
 ---
 
-# 🐾 PawLand (Contoh Proyek UAP)
+# 🐾 PawLand (Sistem Penitipan Hewan)
 
 **PawLand** adalah sistem penitipan hewan berbasis web (PHP & MySQL) yang mendukung fitur transaksi penitipan hewan seperti kucing dan anjing secara aman dan konsisten. Proyek ini mengimplementasikan stored procedure, trigger, transaction, *stored function*, serta backup otomatis menggunakan `mysqldump`. Sistem ini juga dirancang agar selaras dengan prinsip dasar **Pemrosesan Data Terdistribusi**.
 
@@ -61,18 +60,21 @@ Trigger ini memastikan proses penting seperti validasi tanggal dan status tetap 
 
 Setiap data penitipan dilakukan dalam 1 unit transaksi:
 
-```php
 $conn->begin_transaction();
+
 try {
-    // insert penitipan
-    $stmt = $conn->prepare(...);
+    $stmt = $conn->prepare("INSERT INTO penitipan (user_id, nama_hewan, jenis, durasi_hari, tanggal_mulai, status, biaya_total) VALUES (?, ?, ?, ?, ?, 'Diproses', ?)");
+    $stmt->bind_param("issisi", $user_id, $nama, $jenis, $durasi, $tanggalMulai, $biaya_total);
     $stmt->execute();
 
     $conn->commit();
+    header("Location: list_penitipan.php");
+    exit;
 } catch (Exception $e) {
     $conn->rollback();
+    echo "Terjadi kesalahan: " . $e->getMessage();
 }
-```
+?>
 
 Hal ini mencegah data setengah jadi (seperti hewan dititipkan tapi tanpa biaya dihitung) agar tidak masuk ke sistem.
 
@@ -81,35 +83,43 @@ Hal ini mencegah data setengah jadi (seperti hewan dititipkan tapi tanpa biaya d
 ## 🧮 Stored Function
 
 Stored function digunakan untuk menghitung biaya penitipan berdasarkan jumlah hari dan tarif harian:
+![WhatsApp Image 2025-06-14 at 13 03 01_e45bc5a4](https://github.com/user-attachments/assets/3b96df01-76fe-4166-bbf5-c76dc441090e)
 
-```sql
-CREATE FUNCTION hitung_biaya(masuk DATE, keluar DATE, tarif_harian INT)
-RETURNS INT
+<tr>
+            <td><?= htmlspecialchars($row['nama_hewan']) ?></td>
+            <td><?= htmlspecialchars($row['jenis']) ?></td>
+            <td><?= (int)$row['durasi_hari'] ?> hari</td>
+            <td><?= htmlspecialchars($row['status']) ?></td>
+            <td>Rp<?= $row['biaya_total'] !== null ? number_format($row['biaya_total'], 0, ',', '.') : '0' ?></td>
+        </tr>
+
 BEGIN
     DECLARE durasi INT;
     SET durasi = DATEDIFF(keluar, masuk);
     RETURN durasi * tarif_harian;
-END;
-```
-
-### Pemanggilan:
-
-```sql
-SELECT hitung_biaya('2025-06-10', '2025-06-13', 30000);
--- Output: 90000
-```
-
----
+END
 
 ## 💾 Backup Otomatis
 
 PawLand mendukung fitur backup otomatis menggunakan `mysqldump`:
 
-```php
+<?php
+$host = "localhost";
+$user = "root";
+$password = "";
+$dbname = "pawland";
+
 $backup_file = 'backup_' . date('Y-m-d_H-i-s') . '.sql';
 $command = "mysqldump --user=$user --host=$host $dbname > $backup_file";
-system($command);
-```
+
+system($command, $output);
+
+if ($output === 0) {
+    echo "Backup berhasil! File: $backup_file";
+} else {
+    echo "Gagal backup!";
+}
+?>
 
 Backup dapat dijadwalkan menggunakan Task Scheduler agar data rutin diamankan.
 
@@ -120,19 +130,4 @@ Backup dapat dijadwalkan menggunakan Task Scheduler agar data rutin diamankan.
 * **Konsistensi**: Logika utama seperti penghitungan biaya dan validasi tanggal ditanam di database, bukan di aplikasi.
 * **Reliabilitas**: Dengan trigger dan transaksi, sistem tetap valid walaupun ada bug di aplikasi.
 * **Integritas**: Bahkan jika PawLand digunakan dari berbagai client (web, API mobile, dsb), semua proses berjalan sama karena logika utamanya tersimpan di database.
-
----
-
-## 📁 Struktur Folder
-
-```
-pawland/
-├── index.php
-├── login.php
-├── register.php
-├── tambah_penitipan.php
-├── list_penitipan.php
-├── proses_keluar.php
-├── backup.php
-└── db.php
 
